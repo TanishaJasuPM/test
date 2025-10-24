@@ -14,7 +14,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const delayedColumnId = c42e7226; // <-- replace with your Delayed column ID
+            const delayedColumnId = "c42e7226"; // <-- replace with your Delayed column ID
             const today = new Date();
 
             // List all open issues in the repo
