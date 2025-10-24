@@ -1,0 +1,44 @@
+name: Mark Overdue Issues as Delayed
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Runs daily at midnight
+  workflow_dispatch: # Allows manual run
+
+jobs:
+  mark-delayed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply Delayed label to overdue issues
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issues = await github.paginate(
+              github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+              }
+            );
+
+            const today = new Date();
+
+            for (const issue of issues) {
+              const match = issue.body?.match(/Due Date:\s*(\d{4}-\d{2}-\d{2})/);
+              if (!match) continue;
+
+              const dueDate = new Date(match[1]);
+              if (today > dueDate) {
+                const labels = issue.labels.map(l => l.name);
+                if (!labels.includes("Delayed")) {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    labels: ["Delayed"]
+                  });
+                  console.log(`Added Delayed label to #${issue.number}`);
+                }
+              }
+            }
