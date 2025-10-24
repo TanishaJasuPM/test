@@ -1,19 +1,23 @@
-name: Mark Overdue Issues as Delayed
+name: Move Overdue Issues to Delayed Column
 
 on:
   schedule:
-    - cron: "0 0 * * *" # Runs daily at midnight
-  workflow_dispatch: # Allows manual run
+    - cron: "0 0 * * *" # daily at midnight
+  workflow_dispatch: # allows manual run
 
 jobs:
-  mark-delayed:
+  move-overdue:
     runs-on: ubuntu-latest
     steps:
-      - name: Apply Delayed label to overdue issues
+      - name: Move overdue issues to Delayed column
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const delayedColumnId = c42e7226; // <-- replace with your Delayed column ID
+            const today = new Date();
+
+            // List all open issues in the repo
             const issues = await github.paginate(
               github.rest.issues.listForRepo, {
                 owner: context.repo.owner,
@@ -22,25 +26,41 @@ jobs:
               }
             );
 
-            const today = new Date();
-
             for (const issue of issues) {
-              
-            const match = issue.body?.match(/Due Date:\s*([A-Za-z]{3,}\s\d{1,2},\s\d{4})/);
-            if (!match) continue;
-
-            const dueDate = new Date(match[1]);
+              const dueDate = issue.due_on ? new Date(issue.due_on) : null;
+              if (!dueDate) continue;
 
               if (today > dueDate) {
-                const labels = issue.labels.map(l => l.name);
-                if (!labels.includes("Delayed")) {
-                  await github.rest.issues.addLabels({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: issue.number,
-                    labels: ["Delayed"]
+                // Find the card for this issue in any column
+                const projects = await github.rest.projects.listForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo
+                });
+
+                let cardFound = null;
+
+                for (const proj of projects.data) {
+                  const columns = await github.rest.projects.listColumns({
+                    project_id: proj.id
                   });
-                  console.log(`Added Delayed label to #${issue.number}`);
+                  for (const col of columns.data) {
+                    const cards = await github.paginate(github.rest.projects.listCards, { column_id: col.id });
+                    const card = cards.find(c => c.content_url && c.content_url.endsWith(`/issues/${issue.number}`));
+                    if (card) {
+                      cardFound = card;
+                      break;
+                    }
+                  }
+                  if (cardFound) break;
+                }
+
+                if (cardFound) {
+                  await github.rest.projects.moveCard({
+                    card_id: cardFound.id,
+                    column_id: delayedColumnId,
+                    position: "top"
+                  });
+                  console.log(`Moved issue #${issue.number} to Delayed column`);
                 }
               }
             }
