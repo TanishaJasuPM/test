@@ -25,10 +25,12 @@ jobs:
             const today = new Date();
 
             for (const issue of issues) {
-              const match = issue.body?.match(/Due Date:\s*(\d{4}-\d{2}-\d{2})/);
-              if (!match) continue;
+              
+            const match = issue.body?.match(/Due Date:\s*([A-Za-z]{3,}\s\d{1,2},\s\d{4})/);
+            if (!match) continue;
 
-              const dueDate = new Date(match[1]);
+            const dueDate = new Date(match[1]);
+
               if (today > dueDate) {
                 const labels = issue.labels.map(l => l.name);
                 if (!labels.includes("Delayed")) {
