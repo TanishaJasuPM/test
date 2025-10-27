@@ -3,7 +3,7 @@ name: Auto Update Days Delayed
 on:
   schedule:
     - cron: "0 5 * * *"  # Runs every day at 5 AM UTC (10:30 AM IST)
-  workflow_dispatch:      # Allows manual trigger from Actions tab
+  workflow_dispatch:      # Allows manual trigger
 
 jobs:
   update-delays:
@@ -15,14 +15,12 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const projectId = "R_kgDOQIXq8w";  // Your Project ID
+            const projectId = "PVT_kwHODH63Lc4BGVZL";  // ✅ Correct Project ID
             const fieldDaysDelayed = "Days Delayed";
             const fieldDueDate = "Due Date";
             const fieldStatus = "Status";
-
             const today = new Date();
 
-            // Fetch items from the project
             const query = `
               query($projectId: ID!) {
                 node(id: $projectId) {
@@ -54,7 +52,14 @@ jobs:
             `;
 
             const data = await github.graphql(query, { projectId });
+
+            if (!data?.node?.items?.nodes) {
+              console.log("❌ No items found — check Project permissions or ID.");
+              return;
+            }
+
             const items = data.node.items.nodes;
+            console.log(`Found ${items.length} items in project.`);
 
             for (const item of items) {
               let dueDateField, daysDelayedField, statusField;
@@ -76,7 +81,7 @@ jobs:
 
               if (dueDateValue && dueDateValue < today && statusValue !== "Done") {
                 const days = Math.floor((today - dueDateValue) / (1000 * 60 * 60 * 24));
-                console.log(`Updating ${item.id}: ${days} days delayed`);
+                console.log(`🟡 Updating ${item.id}: ${days} days delayed`);
 
                 await github.graphql(`
                   mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: Float!) {
@@ -96,6 +101,25 @@ jobs:
                   value: days
                 });
               }
+              else if (statusValue === "Done" || (dueDateValue && dueDateValue >= today)) {
+                // Clear Days Delayed if task is done or on schedule
+                await github.graphql(`
+                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!) {
+                    updateProjectV2ItemFieldValue(
+                      input: {
+                        projectId: $projectId,
+                        itemId: $itemId,
+                        fieldId: $fieldId,
+                        value: { number: null }
+                      }
+                    ) { clientMutationId }
+                  }
+                `, {
+                  projectId,
+                  itemId: item.id,
+                  fieldId: daysDelayedField
+                });
+              }
             }
 
-            console.log("✅ Days Delayed updated successfully.");
+            console.log("✅ Days Delayed field updated successfully.");
