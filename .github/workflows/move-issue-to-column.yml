@@ -8,8 +8,8 @@ jobs:
   move_card:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: write
-      projects: write
     steps:
       - name: Move card based on issue state
         uses: actions/github-script@v6
@@ -19,28 +19,31 @@ jobs:
             const todoColumnId = "f75ad846";
             const doneColumnId = "98236657";
 
-            // Find the project card connected to this issue
-            const cards = await github.rest.projects.listCards({
-              column_id: todoColumnId,
-              per_page: 100
-            });
-            const doneCards = await github.rest.projects.listCards({
-              column_id: doneColumnId,
-              per_page: 100
-            });
+            // We'll scan all columns just in case
+            const projectColumns = [todoColumnId, doneColumnId];
 
-            const allCards = [...cards.data, ...doneCards.data];
-            const issueCard = allCards.find(c => c.content_url && c.content_url.endsWith(`/issues/${context.issue.number}`));
+            let allCards = [];
+            for (const columnId of projectColumns) {
+              const cards = await github.rest.projects.listCards({
+                column_id: columnId,
+                per_page: 100
+              });
+              allCards = allCards.concat(cards.data);
+            }
+
+            const issueCard = allCards.find(
+              c => c.content_url && c.content_url.endsWith(`/issues/${context.issue.number}`)
+            );
 
             if (!issueCard) {
-              console.log("No project card found for this issue.");
+              console.log(" No project card found for this issue.");
               return;
             }
 
             const targetColumn = context.payload.issue.state === "closed" ? doneColumnId : todoColumnId;
 
             if (issueCard.column_id === targetColumn) {
-              console.log("Card already in the correct column.");
+              console.log(" Card already in correct column.");
               return;
             }
 
